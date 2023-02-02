@@ -144,7 +144,7 @@ def parser_list_page(main_html, first=False):
 
     # 球员名称列表
     players_name = selector.xpath("//tbody/tr/td/div[@class='d-inline pt-2 pl-3']/div/a/text()")
-    players_pos = selector.xpath("//tbody/tr/td[3]/div[1]/text()")
+    players_pos = selector.xpath("//tbody/tr/td[4]/div[1]/text()")
     # 球员对应链接列表
     players_url = selector.xpath("//tbody/tr/@data-url")
     return players_name, players_url, players_pos
@@ -218,6 +218,8 @@ async def parser_player_page(player_html, name, pos, session):
                         value = "False"
                 player_info[key] = value
 
+    if "R.Face" not in player_info:
+        player_info["R.Face"] = False
     # 总分 2.14
     score = selector.xpath('//*[@id="Player-card"]/div[2]/text()')
     player_info["Score"] = score[0]
@@ -349,7 +351,7 @@ async def fetch_and_parser(url, session, name, pos, semaphore):
 
 
 async def get_each_player(name_list, url_list, pos_list, semaphore):
-    print(pos_list)
+    # print(pos_list)
     lenth = len(name_list)
     async with aiohttp.ClientSession() as session:
         result_list = await asyncio.gather(*[fetch_and_parser("https://www.futbin.com" + url_list[index], session, name_list[index], pos_list[index], semaphore) for index in range(0, lenth)])
@@ -382,15 +384,8 @@ if __name__ == '__main__':
     if first_url == "toExcel":
         csv_to_excel()
     else:
-        while(True):
-            type_str = input("是否使用代理 Y/N:")
-            if type_str == "Y" or type_str == "y":
-                # proxy = input("请输入代理地址（格式参考http://127.0.0.1:7890）：")
-                proxy = "http://127.0.0.1:7890"
-                break
-            elif type_str == "N" or type_str == "n":
-                break
         while (True):
+            curPage = -1
             try:
                 semaphore_1 = asyncio.Semaphore(5)
                 main_html = asyncio.run(fetch_main(first_url))
@@ -402,16 +397,17 @@ if __name__ == '__main__':
                 else:
                     firstPage = int(havePage.group(1))
                     url_template = first_url.replace(havePage.group(0), 'page={0}&')
+                curPage = firstPage
                 # print(firstPage)
                 # print(url_template)
                 # 获取最大页数和第一页的球员列表
                 players_name, players_url, players_pos = parser_list_page(main_html, True)
                 asyncio.run(get_each_player(players_name, players_url, players_pos, semaphore_1))
                 save_datas_to_csv(firstPage)
-                first_csv = False
                 maxPage = int(maxPage)
                 if firstPage != maxPage:
                     for page in range(firstPage + 1, maxPage + 1):
+                        curPage = page
                         semaphore = asyncio.Semaphore(5)
                         page_str = str(page)
                         need_fetch_url = url_template.format(page_str)
@@ -424,12 +420,8 @@ if __name__ == '__main__':
                 else:
                     break
             except aiohttp.client_exceptions.ClientConnectorError:
-                print(f"\033[7;31m第{page}解析失败，重新开始解析\033[0m")
+                print(f"\033[7;31m第{curPage}解析失败，重新开始解析\033[0m")
                 first_url = url_template.format(str(page))
-            except BaseException as e:
-                print(f"\033[7;31m在第{page}爬取失败\033[0m")
-                print(e)
-                break
 
         input("=====================防止不闪退=================")
 
